@@ -1,0 +1,50 @@
+services:
+  minio:
+    image: minio/minio
+    ports: ["9000:9000", "9001:9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    volumes: ["minio_data:/data"]
+
+  createbuckets:
+    image: minio/mc
+    depends_on: [minio]
+    entrypoint: >
+      /bin/sh -c "sleep 5; /usr/bin/mc config host add myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; /usr/bin/mc mb myminio/mlflow --ignore-existing; exit 0;"
+
+  mlflow:
+    image: python:3.11-slim
+    ports: ["5000:5000"]
+    depends_on: [minio]
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL}
+    command: >
+      /bin/sh -c "pip install mlflow boto3 && mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root s3://mlflow/ --host 0.0.0.0 --allowed-hosts 'mlflow:5000,localhost:5000'"
+
+  api:
+    build:
+      context: .
+      dockerfile: src/api/Dockerfile
+    ports: ["8000:8000"]
+    depends_on: [mlflow]
+    environment:
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL}
+
+  front:
+    build:
+      context: .
+      dockerfile: src/front/Dockerfile
+    ports: ["8501:8501"]
+    depends_on: [api]
+    environment:
+      API_URL: ${API_URL}
+
+volumes:
+  minio_data:

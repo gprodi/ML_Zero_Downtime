@@ -1,0 +1,26 @@
+[project]
+name = "ml-factory"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi", "uvicorn", "pydantic", "mlflow", "scikit-learn", 
+    "boto3", "streamlit", "requests", "loguru"
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "httpx",
+    "ruff",
+    "sphinx",
+    "sphinx-rtd-theme",
+    "myst-parser"
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+[tool.ruff.lint]
+select = ["E", "F", "I"]

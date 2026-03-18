@@ -1,0 +1,23 @@
+# Dossiers Git
+.git
+.gitignore
+
+# Environnements virtuels locaux (Critique pour la vitesse de build !)
+.venv
+
+# Sécurité
+.env
+
+# Fichiers de développement et de documentation
+tests/
+docs/
+README.md
+CHANGELOG.md
+
+# Fichiers compilés Python
+__pycache__/
+*.py[cod]
+
+# Fichiers d'infrastructure locale
+docker-compose.yml
+rebuild.sh

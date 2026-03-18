@@ -1,0 +1,27 @@
+# Sécurité absolue (Ne jamais commiter ces fichiers !)
+.env
+*.pem
+*.key
+
+# Environnements virtuels (Gérés par uv)
+.venv/
+env/
+venv/
+
+# Fichiers compilés Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# MLOps & Base de données locale
+mlruns/
+mlflow.db
+*.sqlite
+
+# Sphinx (Documentation générée)
+docs/_build/
+
+# IDE et OS
+.vscode/
+.idea/
+.DS_Store
