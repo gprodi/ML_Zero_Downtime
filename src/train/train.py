@@ -4,6 +4,7 @@ import mlflow
 from mlflow.tracking import MlflowClient
 from sklearn.datasets import load_iris
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 
 os.environ["MLFLOW_TRACKING_URI"] = "http://localhost:5000"
 os.environ["MLFLOW_S3_ENDPOINT_URL"] = "http://localhost:9000"
@@ -17,8 +18,8 @@ if __name__ == "__main__":
     X, y = load_iris(return_X_y=True)
 
     with mlflow.start_run():
-        # model = LogisticRegression(max_iter=200)
-        model = RandomForestClassifier(n_estimators=100)  # Pour la Phase 2
+        model = LogisticRegression(max_iter=200)
+        # model = RandomForestClassifier(n_estimators=100)  # Pour la Phase 2
         model.fit(X, y)
         mlflow.sklearn.log_model(model, "model", registered_model_name=MODEL_NAME)
 
