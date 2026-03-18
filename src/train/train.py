@@ -3,7 +3,7 @@ import os
 import mlflow
 from mlflow.tracking import MlflowClient
 from sklearn.datasets import load_iris
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier  # noqa: F401
 from sklearn.linear_model import LogisticRegression
 
 os.environ["MLFLOW_TRACKING_URI"] = "http://localhost:5000"
@@ -19,7 +19,7 @@ if __name__ == "__main__":
 
     with mlflow.start_run():
         model = LogisticRegression(max_iter=200)
-        # model = RandomForestClassifier(n_estimators=100)  # Pour la Phase 2
+        # model = RandomForestClassifier(n_estimators=100)
         model.fit(X, y)
         mlflow.sklearn.log_model(model, "model", registered_model_name=MODEL_NAME)
 
