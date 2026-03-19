@@ -15,8 +15,17 @@ from sklearn.tree import DecisionTreeClassifier
 
 # 1. 🛡️ SÉCURITÉ ET RÉSEAU DYNAMIQUE
 load_dotenv()
-os.environ["MLFLOW_TRACKING_URI"] = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
-os.environ["MLFLOW_S3_ENDPOINT_URL"] = os.getenv("MLFLOW_S3_ENDPOINT_URL", "http://localhost:9000")
+
+# Astuce DevOps : On détecte si le script tourne sur votre PC ou dans un conteneur Docker
+if not os.path.exists("/.dockerenv"):
+    # Nous sommes sur Windows : On force les adresses locales pour contourner le .env
+    os.environ["MLFLOW_TRACKING_URI"] = "http://localhost:5000"
+    os.environ["MLFLOW_S3_ENDPOINT_URL"] = "http://localhost:9000"
+else:
+    # Nous sommes dans Docker : On utilise le réseau interne
+    os.environ["MLFLOW_TRACKING_URI"] = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+    os.environ["MLFLOW_S3_ENDPOINT_URL"] = os.getenv("MLFLOW_S3_ENDPOINT_URL", "http://minio:9000")
+
 os.environ["PREFECT_API_URL"] = os.getenv("PREFECT_API_URL", "http://localhost:4200/api")
 
 MODEL_NAME = "iris_classifier"
