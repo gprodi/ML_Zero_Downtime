@@ -5,11 +5,15 @@ from dotenv import load_dotenv
 from mlflow.tracking import MlflowClient
 from prefect import flow, task
 from sklearn.datasets import load_iris
+from sklearn.ensemble import RandomForestClassifier
+
+# 🧠 Importation de nos 3 "Gladiateurs"
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
 
-# 1. 🛡️ SÉCURITÉ ET RÉSEAU DYNAMIQUE (Compatible Local ET Docker)
+# 1. 🛡️ SÉCURITÉ ET RÉSEAU DYNAMIQUE
 load_dotenv()
 os.environ["MLFLOW_TRACKING_URI"] = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
 os.environ["MLFLOW_S3_ENDPOINT_URL"] = os.getenv("MLFLOW_S3_ENDPOINT_URL", "http://localhost:9000")
@@ -28,31 +32,40 @@ def load_and_split_data():
     return train_test_split(X, y, test_size=0.2, random_state=42)
 
 
-@task(name="Entraînement et MLflow")
-def train_and_evaluate(X_train, X_test, y_train, y_test):
+@task(name="Combat des Modèles (Entraînement)")
+def train_and_evaluate(X_train, X_test, y_train, y_test, model_name, model_instance):
+    """Entraîne UN modèle spécifique et renvoie son score et son ID de run MLflow."""
     mlflow.set_experiment("iris_experiment")
 
-    with mlflow.start_run():
-        params = {"max_iter": 200, "C": 1.0}
-        model = LogisticRegression(**params)
+    # On donne un nom à la run pour la retrouver facilement dans MLflow
+    with mlflow.start_run(run_name=model_name) as run:
+        mlflow.log_param("algorithm", model_name)
 
-        mlflow.log_params(params)
-        model.fit(X_train, y_train)
-
-        predictions = model.predict(X_test)
+        # Entraînement et Prédiction
+        model_instance.fit(X_train, y_train)
+        predictions = model_instance.predict(X_test)
         accuracy = accuracy_score(y_test, predictions)
+
         mlflow.log_metric("accuracy", accuracy)
 
-        mlflow.sklearn.log_model(model, "model", registered_model_name=MODEL_NAME)
-        return accuracy
+        # On sauvegarde l'artefact dans cette Run spécifique (mais sans l'enregistrer en production tout de suite)  # noqa: E501
+        mlflow.sklearn.log_model(model_instance, "model")
+
+        # On renvoie le score ET l'identifiant unique de cette tentative
+        return accuracy, run.info.run_id
 
 
-@task(name="Mise en Production")
-def promote_to_production():
+@task(name="Couronnement du Vainqueur")
+def register_best_model(best_run_id):
+    """Prend le Run ID du modèle gagnant, l'enregistre, et le met en production."""
+    # 1. Enregistrement du modèle vainqueur dans le registre
+    model_uri = f"runs:/{best_run_id}/model"
+    result = mlflow.register_model(model_uri, MODEL_NAME)
+
+    # 2. Assignation de l'alias "production"
     client = MlflowClient()
-    latest_version = client.get_latest_versions(MODEL_NAME, stages=["None"])[0].version
-    client.set_registered_model_alias(MODEL_NAME, "production", latest_version)
-    return latest_version
+    client.set_registered_model_alias(MODEL_NAME, "production", result.version)
+    return result.version
 
 
 # ==========================================
@@ -60,20 +73,43 @@ def promote_to_production():
 # ==========================================
 
 
-@flow(name="Pipeline Principal d'Entraînement", log_prints=True)
+@flow(name="AutoML Pipeline d'Entraînement", log_prints=True)
 def main_training_flow():
-    print("🚀 Démarrage de l'usine d'entraînement automatique...")
+    print("🚀 Démarrage de l'arène AutoML...")
     X_train, X_test, y_train, y_test = load_and_split_data()
-    accuracy = train_and_evaluate(X_train, X_test, y_train, y_test)
 
-    print(f"📊 Précision obtenue : {accuracy:.4f}")
+    # 🥊 Nos 3 concurrents
+    models_to_test = {
+        "LogisticRegression": LogisticRegression(max_iter=200),
+        "DecisionTree": DecisionTreeClassifier(max_depth=5, random_state=42),
+        "RandomForest": RandomForestClassifier(n_estimators=50, max_depth=5, random_state=42),
+    }
 
-    if accuracy >= 0.80:
-        print("✅ Qualité suffisante. Déploiement en cours...")
-        version = promote_to_production()
+    best_accuracy = 0.0
+    best_run_id = None
+    best_model_name = ""
+
+    # On fait combattre chaque modèle un par un
+    for name, model in models_to_test.items():
+        print(f"🔄 Entraînement en cours : {name}...")
+        acc, run_id = train_and_evaluate(X_train, X_test, y_train, y_test, name, model)
+        print(f"📊 {name} a obtenu : {acc:.4f}")
+
+        # On met à jour le champion en titre
+        if acc > best_accuracy:
+            best_accuracy = acc
+            best_run_id = run_id
+            best_model_name = name
+
+    print(f"🏆 Le grand gagnant est {best_model_name} avec {best_accuracy:.4f} !")
+
+    # La barrière de sécurité finale
+    if best_accuracy >= 0.80:
+        print("✅ Le gagnant a le niveau requis. Déploiement en production...")
+        version = register_best_model(best_run_id)
         print(f"🚀 Modèle V{version} en production !")
     else:
-        print("❌ Qualité insuffisante. Le modèle est rejeté.")
+        print("❌ Même le gagnant est trop mauvais (Score < 0.80). Aucun déploiement.")
 
 
 # ==========================================
@@ -83,5 +119,5 @@ def main_training_flow():
 if __name__ == "__main__":
     print("🤖 Initialisation du Déploiement Prefect (Mode Serveur)...")
     main_training_flow.serve(
-        name="iris-nightly-training", cron="0 3 * * *", tags=["production", "mlops"]
+        name="iris-automl-nightly", cron="0 3 * * *", tags=["production", "automl"]
     )
