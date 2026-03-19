@@ -90,3 +90,11 @@ jobs:
           file: src/front/Dockerfile
           push: true
           tags: ghcr.io/${{ env.REPO_LOWER }}/mlfactory-front:latest
+
+      - name: 🚀 Push Train (Automated ML)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: src/train/Dockerfile
+          push: true
+          tags: ghcr.io/${{ env.REPO_LOWER }}/mlfactory-train:latest    
