@@ -14,6 +14,7 @@ dependencies = [
     "loguru",
     "python-dotenv>=1.2.2",
     "prefect>=3.6.22",
+    "prefect-docker>=0.7.1",
 ]
 
 [dependency-groups]

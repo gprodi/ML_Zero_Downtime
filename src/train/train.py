@@ -1,6 +1,8 @@
 import os
 
+import boto3
 import mlflow
+from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 from mlflow.tracking import MlflowClient
 from prefect import flow, task
@@ -30,9 +32,33 @@ os.environ["PREFECT_API_URL"] = os.getenv("PREFECT_API_URL", "http://localhost:4
 
 MODEL_NAME = "iris_classifier"
 
+
 # ==========================================
 # 🧱 DÉFINITION DES TÂCHES (TASKS)
 # ==========================================
+@task(name="Initialisation S3", retries=5, retry_delay_seconds=3)
+def ensure_mlflow_bucket_exists():
+    """Vérifie si le bucket existe, le crée sinon, et encaisse les retards de MinIO."""
+    print("🔍 Vérification de l'infrastructure S3...")
+    s3_client = boto3.client(
+        "s3",
+        endpoint_url=os.environ.get("MLFLOW_S3_ENDPOINT_URL"),
+        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+    )
+    try:
+        # Tente de lire le bucket
+        s3_client.head_bucket(Bucket="mlflow")
+        print("✅ Bucket 'mlflow' prêt.")
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        # 404 ou NoSuchBucket signifie qu'il n'existe pas encore
+        if error_code == "404" or error_code == "NoSuchBucket":
+            print("⚠️ Bucket introuvable. Création en cours...")
+            s3_client.create_bucket(Bucket="mlflow")
+            print("✅ Bucket 'mlflow' créé avec succès.")
+        else:
+            raise e
 
 
 @task(name="Chargement des données", retries=2, retry_delay_seconds=5)
@@ -85,6 +111,10 @@ def register_best_model(best_run_id):
 @flow(name="AutoML Pipeline d'Entraînement", log_prints=True)
 def main_training_flow():
     print("🚀 Démarrage de l'arène AutoML...")
+
+    # --- LA BARRIÈRE INFRASTRUCTURE ---
+    ensure_mlflow_bucket_exists()
+
     X_train, X_test, y_train, y_test = load_and_split_data()
 
     # 🥊 Nos 3 concurrents
