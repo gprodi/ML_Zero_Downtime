@@ -1,0 +1,39 @@
+name: mlfactory-train-deploy
+prefect-version: 3.6.22
+
+# 1. Construction de l'image (Build)
+build:
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build_image
+      requires: prefect-docker>=0.3.1
+      # CORRECTION : Le bon chemin vers votre projet
+      image_name: ghcr.io/gprodi/ml_zero_downtime/mlfactory-train
+      tag: latest
+      dockerfile: src/train/Dockerfile
+
+# 2. Envoi sur le registre (Push)
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.3.1
+      image_name: '{{ build_image.image_name }}'
+      tag: '{{ build_image.tag }}'
+
+# 3. Récupération par le Worker (Pull)
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /app
+
+# 4. Définition des déploiements
+deployments:
+  - name: "iris-automl-frequent"
+    entrypoint: "src/train/train.py:main_training_flow"
+    work_pool:
+      name: "docker-pool"
+    job_variables:
+      # CORRECTION : Le Worker doit utiliser la bonne image
+      image: ghcr.io/gprodi/ml_zero_downtime/mlfactory-train:latest
+      env:
+        MLFLOW_TRACKING_URI: http://mlflow:5000
+        MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+    schedule:
+      cron: "*/5 * * * *"

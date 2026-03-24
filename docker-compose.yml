@@ -42,23 +42,44 @@ services:
     environment:
       API_URL: ${API_URL}
 
+    # --- BASE DE DONNÉES PREFECT ---
+  prefect-db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: prefect
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-prefect_pass}
+      POSTGRES_DB: prefect
+    volumes:
+      - prefect_db_data:/var/lib/postgresql/data
+
+  # --- SERVEUR PREFECT ---
   prefect:
     image: prefecthq/prefect:3-python3.11
+    restart: always
     ports: ["4200:4200"]
+    depends_on: [prefect-db]
     command: prefect server start --host 0.0.0.0
     environment:
-      - PREFECT_API_URL=http://127.0.0.1:4200/api
+      PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:${POSTGRES_PASSWORD:-prefect_pass}@prefect-db:5432/prefect
+      PREFECT_API_URL: http://prefect:4200/api
+      PREFECT_UI_API_URL: http://localhost:4200/api
 
+  # --- LE WORKER DOCKER ---
   train_worker:
+    # CORRECTION : Alignement avec l'API et le Front
     image: ghcr.io/gprodi/ml_zero_downtime/mlfactory-train:latest
     depends_on: [mlflow, minio, prefect]
+    restart: on-failure
+    # Le worker démarre et écoute le pool défini dans le yaml
+    command: prefect worker start --pool 'docker-pool'
     environment:
-      # Le worker doit savoir comment parler aux autres conteneurs
+      PREFECT_API_URL: http://prefect:4200/api
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
       MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      PREFECT_API_URL: http://prefect:4200/api   
 
 volumes:
   minio_data:
+  prefect_db_data: # Ajout du volume pour la persistance Postgres
