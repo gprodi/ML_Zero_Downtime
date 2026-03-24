@@ -1,4 +1,5 @@
 services:
+  # --- 1. LE STOCKAGE DES ARTEFACTS (MINIO) ---
   minio:
     image: minio/minio
     ports: ["9000:9000", "9001:9001"]
@@ -6,14 +7,10 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     command: server /data --console-address ":9001"
-    volumes: ["minio_data:/data"]
+    volumes: 
+      - minio_data:/data
 
-  createbuckets:
-    image: minio/mc
-    depends_on: [minio]
-    entrypoint: >
-      /bin/sh -c "sleep 5; /usr/bin/mc config host add myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; /usr/bin/mc mb myminio/mlflow --ignore-existing; exit 0;"
-
+  # --- 3. LE REGISTRE ET TRACKING ML (MLFLOW) ---
   mlflow:
     image: python:3.11-slim
     ports: ["5000:5000"]
@@ -22,27 +19,13 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL}
+    # Correction de la faille : On place la base SQLite dans un dossier monté en volume
     command: >
-      /bin/sh -c "pip install mlflow boto3 && mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root s3://mlflow/ --host 0.0.0.0 --allowed-hosts 'mlflow:5000,localhost:5000'"
+      /bin/sh -c "pip install mlflow boto3 && mlflow server --backend-store-uri sqlite:////mlflow_db/mlflow.db --default-artifact-root s3://mlflow/ --host 0.0.0.0 --allowed-hosts 'mlflow:5000,localhost:5000'"
+    volumes:
+      - mlflow_data:/mlflow_db
 
-  api:
-    image: ghcr.io/gprodi/ml_zero_downtime/mlfactory-api:latest
-    ports: ["8000:8000"]
-    depends_on: [mlflow]
-    environment:
-      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL}
-
-  front:
-    image: ghcr.io/gprodi/ml_zero_downtime/mlfactory-front:latest
-    ports: ["8501:8501"]
-    depends_on: [api]
-    environment:
-      API_URL: ${API_URL}
-
-    # --- BASE DE DONNÉES PREFECT ---
+  # --- 4. LA BASE DE DONNÉES DE L'ORCHESTRATEUR (POSTGRESQL) ---
   prefect-db:
     image: postgres:15-alpine
     restart: always
@@ -53,7 +36,7 @@ services:
     volumes:
       - prefect_db_data:/var/lib/postgresql/data
 
-  # --- SERVEUR PREFECT ---
+  # --- 5. LE SERVEUR D'ORCHESTRATION (PREFECT) ---
   prefect:
     image: prefecthq/prefect:3-python3.11
     restart: always
@@ -65,13 +48,11 @@ services:
       PREFECT_API_URL: http://prefect:4200/api
       PREFECT_UI_API_URL: http://localhost:4200/api
 
-  # --- LE WORKER DOCKER ---
+  # --- 6. LE WORKER D'ENTRAÎNEMENT DISTRIBUÉ ---
   train_worker:
-    # CORRECTION : Alignement avec l'API et le Front
     image: ghcr.io/gprodi/ml_zero_downtime/mlfactory-train:latest
     depends_on: [mlflow, minio, prefect]
     restart: on-failure
-    # Le worker démarre et écoute le pool défini dans le yaml
     command: prefect worker start --pool 'docker-pool'
     environment:
       PREFECT_API_URL: http://prefect:4200/api
@@ -80,6 +61,27 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
 
+  # --- 7. L'API D'INFÉRENCE ---
+  api:
+    image: ghcr.io/gprodi/ml_zero_downtime/mlfactory-api:latest
+    ports: ["8000:8000"]
+    depends_on: [mlflow]
+    environment:
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL}
+
+  # --- 8. L'INTERFACE UTILISATEUR (STREAMLIT) ---
+  front:
+    image: ghcr.io/gprodi/ml_zero_downtime/mlfactory-front:latest
+    ports: ["8501:8501"]
+    depends_on: [api]
+    environment:
+      API_URL: ${API_URL}
+
+# --- DÉCLARATION DES VOLUMES PERSISTANTS ---
 volumes:
   minio_data:
-  prefect_db_data: # Ajout du volume pour la persistance Postgres
+  mlflow_data:
+  prefect_db_data:
