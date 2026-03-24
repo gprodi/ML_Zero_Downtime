@@ -67,11 +67,15 @@ cd ML_Zero_Downtime
 ⚠️ **Étape critique :** Créez un fichier `.env` à la racine du projet pour la gestion sécurisée des identifiants et du réseau.
 
 ```env
-# Contenu du fichier .env
-MINIO_ROOT_USER=mlops_admin
-MINIO_ROOT_PASSWORD=SuperSecretPassword123!
-AWS_ACCESS_KEY_ID=mlops_admin
-AWS_SECRET_ACCESS_KEY=SuperSecretPassword123!
+# Configuration (.env)
+Créez un fichier `.env` à la racine du projet et remplissez-le avec vos propres identifiants sécurisés :
+
+MINIO_ROOT_USER=<votre_nom_utilisateur_minio>
+MINIO_ROOT_PASSWORD=<votre_mot_de_passe_robuste>
+AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
+AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
+
+# Configuration réseau (Ne pas modifier pour un usage local)
 MLFLOW_S3_ENDPOINT_URL=http://minio:9000
 MLFLOW_TRACKING_URI=http://mlflow:5000
 API_URL=http://api:8000
